@@ -1,0 +1,17 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.cargo/config
+.cargo/config.toml
+/.idea
+/.vscode
+/benches/target
+
+**/.DS_Store
+**/_gsdata_
+*.db3-shm
+*.db3-wal
+.env
+/tmp
+logs/**
+rustc-ice*
