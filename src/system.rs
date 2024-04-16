@@ -1,27 +1,55 @@
 use bevy::prelude::*;
 use bevy::tasks::TaskPool;
-use bevy_eventwork::{EventworkRuntime, Network, NetworkEvent};
-use bevy_eventwork_mod_websockets::{NetworkSettings, WebSocketProvider};
 
-use crate::client::{ConnectionState, DingTalkClient};
+
+use crate::client::{ConnectionState, Client, DingTalkClient, AsyncRuntime};
+use crate::client::down::RobotRecvMessage;
+use crate::client::up::EventAckData;
+use crate::constant::TOPIC_ROBOT;
 
 pub(crate) fn connect_to_server(
-    net: ResMut<Network<WebSocketProvider>>,
-    settings: Res<NetworkSettings>,
-    task_pool: Res<EventworkRuntime<TaskPool>>,
     mut client: ResMut<DingTalkClient>,
-    mut state: ResMut<NextState<ConnectionState>>
+    rt: Res<AsyncRuntime>,
+    mut state: ResMut<NextState<ConnectionState>>,
 ) {
-    match client.get_endpoint() {
-        Ok(url) => {
-            net.connect(url::Url::parse(&url).unwrap(), &task_pool.0, &settings);
-            state.set(ConnectionState::Connecting);
-        }
-        Err(err) => {
-            error!("get endpoint error: {}", err);
-            return;
-        }
-    }
+
+    let client = client.clone();
+    rt.spawn(async {
+        client
+            .register_callback_listener(TOPIC_ROBOT, |client, msg| {
+                async move {
+                    let RobotRecvMessage {
+                        content,
+                        sender_staff_id,
+                        conversation_id,
+                        conversation_type,
+                        sender_nick,
+                        ..
+                    } = msg;
+                    println!("Message Received from {}: {:?}", sender_nick, content);
+
+                    Ok::<_, anyhow::Error>(())
+                }
+            })
+            .register_all_event_listener(|msg| {
+                println!("event: {:?}", msg);
+                EventAckData::default()
+            })
+            .connect().await.unwrap();
+    });
+
+    state.set(ConnectionState::Connecting);
+
+    // match client.get_endpoint() {
+    //     Ok(url) => {
+    //         net.connect(url::Url::parse(&url).unwrap(), &task_pool.0, &settings);
+    //         state.set(ConnectionState::Connecting);
+    //     }
+    //     Err(err) => {
+    //         error!("get endpoint error: {}", err);
+    //         return;
+    //     }
+    // }
     // net.connect(
     //     url::Url::parse("ws://127.0.0.1:8081").unwrap(),
     //     &task_pool.0,
@@ -29,19 +57,8 @@ pub(crate) fn connect_to_server(
     // );
 }
 
-pub(crate) fn handle_network_events(mut new_network_events: EventReader<NetworkEvent>, mut state: ResMut<NextState<ConnectionState>>) {
-    for event in new_network_events.read() {
-        info!("Received event {:?}", event);
-        match event {
-            NetworkEvent::Connected(_) => {
-                state.set(ConnectionState::Connected);
-            }
-            NetworkEvent::Disconnected(_) => {
-                state.set(ConnectionState::Disconnected);
-            }
-            NetworkEvent::Error(_) => {
-                state.set(ConnectionState::Disconnected);
-            }
-        }
-    }
+pub(crate) fn handle_network_events(
+
+) {
+
 }

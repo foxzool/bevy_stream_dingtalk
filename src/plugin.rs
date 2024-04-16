@@ -3,10 +3,10 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::tasks::TaskPoolBuilder;
 use bevy::time::common_conditions::on_timer;
-use bevy_eventwork::EventworkRuntime;
-use bevy_eventwork_mod_websockets::{NetworkSettings, WebSocketProvider};
+use tokio::runtime;
 
-use crate::client::{ConnectionState, DingTalkClient};
+
+use crate::client::{ConnectionState, Client, DingTalkClient, AsyncRuntime};
 use crate::system::*;
 
 pub struct StreamDingTalkPlugin {
@@ -16,28 +16,29 @@ pub struct StreamDingTalkPlugin {
 
 impl Plugin for StreamDingTalkPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(bevy_eventwork::EventworkPlugin::<
-            WebSocketProvider,
-            bevy::tasks::TaskPool,
-        >::default());
-        app.insert_resource(NetworkSettings::default());
-        app.insert_resource(EventworkRuntime(
-            TaskPoolBuilder::new().num_threads(2).build(),
-        ));
+
         debug!(
             "StreamDingTalkPlugin init with client_id: {}, client_secret: {}",
             self.client_id, self.client_secret
         );
-        app.insert_resource(DingTalkClient::new(
-            self.client_id.clone(),
-            self.client_secret.clone(),
-        ))
+        let async_runtime = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        app
+            .insert_resource(AsyncRuntime(async_runtime))
+            .insert_resource(DingTalkClient::new(
+                    self.client_id.clone(),
+                    self.client_secret.clone(),
+                ).unwrap()
+            )
         .init_state::<ConnectionState>();
         app.add_systems(
             Update,
             connect_to_server
                 .run_if(in_state(ConnectionState::Disconnected))
                 .run_if(on_timer(Duration::from_secs_f64(1.0))),
-        ).add_systems(Update, handle_network_events);
+        )
+        .add_systems(Update, handle_network_events);
     }
 }
